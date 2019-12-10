@@ -33,10 +33,17 @@ module.exports = class binance extends Exchange {
                     ],
                 },
             },
+            'has': {
+                'fetchMarkets': true,
+                'fetchTickers': true,
+                'fetchTicker': true,
+            },
         });
     }
 
     async fetchMarkets (params = {}) {
+        // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-assets
+        // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-markets
         const assets = await this.webGetAssets ();
         const markets = await this.webGetMarkets ();
         const result = [];
@@ -44,18 +51,18 @@ module.exports = class binance extends Exchange {
         for (let i = 0; i < assets.length; i++) {
             preparedAssets[assets[i]['id']] = {
                 'name': this.safeString (assets[i], 'name'),
-                'spot_name': this.safeString (assets[i], 'spot_name'),
-                'spot_id': this.safeString (assets[i], 'spot_id'),
+                'spot_name': this.safeString (assets[i], 'spot_name', null),
+                'spot_id': this.safeString (assets[i], 'spot_id', null),
                 'scale': this.safeString (assets[i], 'scale'),
             };
         }
         for (let i = 0; i < markets.length; i++) {
             const market = markets[i];
             const baseId = this.safeInteger (market, 'base');
-            const baseName = this.safeString (preparedAssets[baseId], 'spot_name');
+            const baseName = this.safeString2 (preparedAssets[baseId], 'spot_name', 'name');
             const base = this.safeCurrencyCode (baseName);
             const quoteId = this.safeInteger (market, 'counter');
-            const quoteName = this.safeString (preparedAssets[quoteId], 'spot_name');
+            const quoteName = this.safeString2 (preparedAssets[quoteId], 'spot_name', 'name');
             const quote = this.safeCurrencyCode (quoteName);
             const symbol = base + '/' + quote;
             let active = true;
@@ -86,6 +93,7 @@ module.exports = class binance extends Exchange {
     }
 
     async fetchTickers (symbols = undefined, params = {}) {
+        // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-tickers
         await this.loadMarkets ();
         const response = await this.webGetTickers (params);
         const result = {};
@@ -97,54 +105,46 @@ module.exports = class binance extends Exchange {
         return result;
     }
 
+    async fetchTicker (symbol = undefined, params = {}) {
+        // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-tickersbasecounter
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'base': market['baseId'],
+            'counter': market['quoteId'],
+        };
+        const response = await this.webGetTickersBaseCounter (this.extend (request, params));
+        return this.parseTicker (response);
+    }
+
     parseTicker (ticker, market = undefined) {
         const tickerName = this.safeString (ticker, 'name');
         if (market === undefined) {
             market = this.findMarket (tickerName);
         }
-        // let timestamp = this.safeFloat (ticker, 'timestamp');
-        // if (timestamp !== undefined) {
-        //     timestamp *= 1000;
-        // }
-        // let symbol = undefined;
-        // if (market !== undefined) {
-        //     symbol = market['symbol'];
-        // } else if ('pair' in ticker) {
-        //     const marketId = this.safeString (ticker, 'pair');
-        //     if (marketId in this.markets_by_id) {
-        //         market = this.markets_by_id[marketId];
-        //     }
-        //     if (market !== undefined) {
-        //         symbol = market['symbol'];
-        //     } else {
-        //         const baseId = marketId.slice (0, 3);
-        //         const quoteId = marketId.slice (3, 6);
-        //         const base = this.safeCurrencyCode (baseId);
-        //         const quote = this.safeCurrencyCode (quoteId);
-        //         symbol = base + '/' + quote;
-        //     }
-        // }
-        // const last = this.safeFloat (ticker, 'last_price');
+        let timestamp = this.safeInteger (ticker, 'time'); // in microseconds
+        timestamp = parseInt (timestamp / 1000000);
+        const last = this.safeFloat (ticker, 'last');
         return {
             'symbol': market['symbol'],
-            // 'timestamp': timestamp,
-            // 'datetime': this.iso8601 (timestamp),
-            // 'high': this.safeFloat (ticker, 'high'),
-            // 'low': this.safeFloat (ticker, 'low'),
-            // 'bid': this.safeFloat (ticker, 'bid'),
-            // 'bidVolume': undefined,
-            // 'ask': this.safeFloat (ticker, 'ask'),
-            // 'askVolume': undefined,
-            // 'vwap': undefined,
-            // 'open': undefined,
-            // 'close': last,
-            // 'last': last,
-            // 'previousClose': undefined,
-            // 'change': undefined,
-            // 'percentage': undefined,
-            // 'average': this.safeFloat (ticker, 'mid'),
-            // 'baseVolume': this.safeFloat (ticker, 'volume'),
-            // 'quoteVolume': undefined,
+            'timestamp': timestamp,
+            'datetime': this.iso8601 (timestamp),
+            'high': this.safeFloat (ticker, 'high'),
+            'low': this.safeFloat (ticker, 'low'),
+            'bid': this.safeFloat (ticker, 'bid'),
+            'bidVolume': undefined,
+            'ask': this.safeFloat (ticker, 'ask'),
+            'askVolume': undefined,
+            'vwap': undefined,
+            'open': undefined,
+            'close': last,
+            'last': last,
+            'previousClose': undefined,
+            'change': undefined,
+            'percentage': undefined,
+            'average': undefined,
+            'baseVolume': this.safeFloat (ticker, 'volume'),
+            'quoteVolume': undefined,
             'info': ticker,
         };
     }
