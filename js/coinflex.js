@@ -30,6 +30,7 @@ module.exports = class binance extends Exchange {
                         'markets/',
                         'tickers/',
                         'tickers/{base}:{counter}',
+                        'depth/{base}:{counter}',
                     ],
                 },
             },
@@ -127,6 +128,7 @@ module.exports = class binance extends Exchange {
         const last = this.safeFloat (ticker, 'last');
         return {
             'symbol': market['symbol'],
+
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'high': this.safeFloat (ticker, 'high'),
@@ -147,6 +149,18 @@ module.exports = class binance extends Exchange {
             'quoteVolume': undefined,
             'info': ticker,
         };
+    }
+
+    async fetchOrderBook (symbol, limit = undefined, params = {}) {
+        // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-depthbasecounter
+        await this.loadMarkets ();
+        const market = this.market (symbol);
+        const request = {
+            'base': market['baseId'],
+            'counter': market['quoteId'],
+        };
+        const response = await this.webGetDepthBaseCounter (this.extend (request, params));
+        return this.parseOrderBook (response);
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
