@@ -16,7 +16,8 @@ module.exports = class binance extends Exchange {
             'urls': {
                 'www': 'https://coinflex.com/',
                 'api': {
-                    'web': 'https://webapi.coinflex.com',
+                    'public': 'https://webapi.coinflex.com',
+                    'private': 'https://webapi.coinflex.com',
                 },
                 'fees': 'https://coinflex.com/fees/',
                 'doc': [
@@ -24,7 +25,7 @@ module.exports = class binance extends Exchange {
                 ],
             },
             'api': {
-                'web': {
+                'public': {
                     'get': [
                         'assets/',
                         'markets/',
@@ -33,11 +34,22 @@ module.exports = class binance extends Exchange {
                         'depth/{base}:{counter}',
                     ],
                 },
+                'private': {
+                    'get': [
+                        'balances/',
+                    ],
+                },
             },
             'has': {
                 'fetchMarkets': true,
                 'fetchTickers': true,
                 'fetchTicker': true,
+            },
+            'requiredCredentials': {
+                'apiKey': true,
+                'privateKey': true,
+                'uid': true,
+                'secret': false,
             },
         });
     }
@@ -45,8 +57,8 @@ module.exports = class binance extends Exchange {
     async fetchMarkets (params = {}) {
         // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-assets
         // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-markets
-        const assets = await this.webGetAssets ();
-        const markets = await this.webGetMarkets ();
+        const assets = await this.publicGetAssets ();
+        const markets = await this.publicGetMarkets ();
         const result = [];
         const preparedAssets = {};
         for (let i = 0; i < assets.length; i++) {
@@ -96,7 +108,7 @@ module.exports = class binance extends Exchange {
     async fetchTickers (symbols = undefined, params = {}) {
         // https://github.com/coinflex-exchange/API/blob/master/REST.md#get-tickers
         await this.loadMarkets ();
-        const response = await this.webGetTickers (params);
+        const response = await this.publicGetTickers (params);
         const result = {};
         for (let i = 0; i < response.length; i++) {
             const ticker = this.parseTicker (response[i]);
@@ -114,7 +126,7 @@ module.exports = class binance extends Exchange {
             'base': market['baseId'],
             'counter': market['quoteId'],
         };
-        const response = await this.webGetTickersBaseCounter (this.extend (request, params));
+        const response = await this.publicGetTickersBaseCounter (this.extend (request, params));
         return this.parseTicker (response);
     }
 
@@ -159,8 +171,17 @@ module.exports = class binance extends Exchange {
             'base': market['baseId'],
             'counter': market['quoteId'],
         };
-        const response = await this.webGetDepthBaseCounter (this.extend (request, params));
+        const response = await this.publicGetDepthBaseCounter (this.extend (request, params));
         return this.parseOrderBook (response);
+    }
+
+    async fetchBalance (params = {}) {
+        await this.loadMarkets ();
+        debugger;
+        const response = await this.privateGetBalances (params);
+        for (let i = 0; i < response.length; i++) {
+            const balance = response[i];
+        }
     }
 
     sign (path, api = 'public', method = 'GET', params = {}, headers = undefined, body = undefined) {
@@ -173,6 +194,13 @@ module.exports = class binance extends Exchange {
                 const suffix = '?' + this.urlencode (query);
                 url += suffix;
             }
+        }
+        if (api === 'private') {
+            this.checkRequiredCredentials ();
+            const sid = this.uid + '/' + this.apiKey + ':' + this.privateKey;
+            headers = {
+                'Authorization': 'Basic ' + this.stringToBase64 (sid),
+            };
         }
         return { 'url': url, 'method': method, 'body': body, 'headers': headers };
     }
